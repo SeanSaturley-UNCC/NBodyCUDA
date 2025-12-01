@@ -4,7 +4,7 @@
 #include <cmath>
 #include <vector>
 
-__constant__ double G = 6.674e-11; // constant accessible on GPU
+__constant__ double G = 6.674e-11; 
 
 struct simulation {
     size_t nbpart;
@@ -19,7 +19,7 @@ struct simulation {
           vx(nb), vy(nb), vz(nb), fx(nb), fy(nb), fz(nb) {}
 };
 
-// CPU initialization
+// initialized cpu
 void random_init(simulation& s) {
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -48,13 +48,16 @@ void init_solar(simulation& s) {
     };
 
     double AU = 1.496e11;
+
     s.x = {0, 0.39*AU, 0.72*AU, 1.0*AU, 1.52*AU, 5.20*AU, 9.58*AU, 19.22*AU, 30.05*AU, 1.0*AU + 3.844e8};
     s.y = std::vector<double>(10, 0);
     s.z = std::vector<double>(10, 0);
+   
     s.vx = std::vector<double>(10, 0);
     s.vy = {0, 47870, 35020, 29780, 24130, 13070, 9680, 6800, 5430, 29780 + 1022};
     s.vz = std::vector<double>(10, 0);
 }
+
 
 // CUDA kernels
 __global__ void compute_forces(size_t n, double* mass, double* x, double* y, double* z,
@@ -62,7 +65,9 @@ __global__ void compute_forces(size_t n, double* mass, double* x, double* y, dou
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
 
+
     double fx_i = 0.0, fy_i = 0.0, fz_i = 0.0;
+   
     double softening = 0.1;
 
     for (size_t j = 0; j < n; ++j) {
@@ -89,22 +94,26 @@ __global__ void compute_forces(size_t n, double* mass, double* x, double* y, dou
 __global__ void update_positions(size_t n, double dt, double* mass, double* x, double* y, double* z,
                                  double* vx, double* vy, double* vz,
                                  double* fx, double* fy, double* fz) {
+
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
 
     vx[i] += fx[i] / mass[i] * dt;
     vy[i] += fy[i] / mass[i] * dt;
+
     vz[i] += fz[i] / mass[i] * dt;
 
     x[i] += vx[i] * dt;
     y[i] += vy[i] * dt;
+
     z[i] += vz[i] * dt;
 }
 
-// Utility to print state
+// print state
 void dump_state(size_t n, double* mass, double* x, double* y, double* z,
                 double* vx, double* vy, double* vz, double* fx, double* fy, double* fz) {
     std::cout << n << '\t';
+    
     for (size_t i = 0; i < n; ++i) {
         std::cout << mass[i] << '\t' << x[i] << '\t' << y[i] << '\t' << z[i] << '\t';
         std::cout << vx[i] << '\t' << vy[i] << '\t' << vz[i] << '\t';
@@ -122,9 +131,12 @@ int main(int argc, char* argv[]) {
 
     double dt = std::atof(argv[2]);
     size_t nbstep = std::atol(argv[3]);
+
     size_t printevery = std::atol(argv[4]);
 
     simulation s(1);
+
+
 
     size_t nbpart = std::atol(argv[1]);
     if (nbpart > 0) {
@@ -145,6 +157,7 @@ int main(int argc, char* argv[]) {
     cudaMalloc(&d_y, n * sizeof(double));
     cudaMalloc(&d_z, n * sizeof(double));
     cudaMalloc(&d_vx, n * sizeof(double));
+
     cudaMalloc(&d_vy, n * sizeof(double));
     cudaMalloc(&d_vz, n * sizeof(double));
     cudaMalloc(&d_fx, n * sizeof(double));
@@ -167,9 +180,12 @@ int main(int argc, char* argv[]) {
         compute_forces<<<gridSize, blockSize>>>(n, d_mass, d_x, d_y, d_z, d_fx, d_fy, d_fz);
         cudaDeviceSynchronize();
 
+
+
         update_positions<<<gridSize, blockSize>>>(n, dt, d_mass, d_x, d_y, d_z, d_vx, d_vy, d_vz,
                                                   d_fx, d_fy, d_fz);
         cudaDeviceSynchronize();
+
 
         if (step % printevery == 0) {
             cudaMemcpy(s.x.data(), d_x, n * sizeof(double), cudaMemcpyDeviceToHost);
@@ -188,10 +204,13 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Free device memory
+
+    // free up device memory
     cudaFree(d_mass); cudaFree(d_x); cudaFree(d_y); cudaFree(d_z);
+
     cudaFree(d_vx); cudaFree(d_vy); cudaFree(d_vz);
     cudaFree(d_fx); cudaFree(d_fy); cudaFree(d_fz);
 
     return 0;
 }
+
